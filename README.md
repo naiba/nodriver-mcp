@@ -11,41 +11,130 @@ Docker-based browser automation MCP using [nodriver](https://github.com/ultrafun
 - **Multi-tab support**: Open, switch between, and close tabs
 - **Anti-detection**: Uses nodriver to avoid bot detection
 
+## Prerequisites
+
+- **Docker**: Make sure Docker is installed and running
+  - macOS: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+  - Linux: `sudo apt install docker.io` or equivalent
+- **Python 3.10+**: Required for the MCP server
+- **uv** (recommended): Fast Python package manager
+
 ## Installation
 
-### 1. Build the browser container image
+### Step 1: Clone the repository
 
 ```bash
+git clone <repository-url> nodriver-mcp
 cd nodriver-mcp
+```
+
+Or clone to a specific directory:
+
+```bash
+git clone <repository-url> ~/Projects/nodriver-mcp
+cd ~/Projects/nodriver-mcp
+```
+
+Replace `<repository-url>` with the actual repository URL.
+
+### Step 2: Build the Docker image
+
+This image contains Chrome and the nodriver HTTP server:
+
+```bash
 docker build -t nodriver-mcp-browser .
 ```
 
-### 2. Install the MCP server (using uv)
+Verify the image was built:
+
+```bash
+docker images | grep nodriver-mcp-browser
+```
+
+### Step 3: Install the MCP server
+
+**Option A: Using uv (recommended)**
 
 ```bash
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create venv with Python 3.11 and install
+# Create virtual environment and install
 uv venv --python 3.11
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -e .
 ```
 
-### 3. Configure Claude Desktop
+**Option B: Using pip**
 
-Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .
+```
+
+### Step 4: Configure Claude Code
+
+Add the MCP server to your Claude Code configuration.
+
+**Find your project path:**
+
+```bash
+# Run this in the nodriver-mcp directory
+pwd
+```
+
+**Edit the configuration file:**
+
+- **Claude Code (CLI)**: `~/.claude/mcp.json`
+- **Claude Desktop (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Claude Desktop (Windows)**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Configuration using uv (recommended):**
 
 ```json
 {
   "mcpServers": {
     "nodriver": {
-      "command": "/Users/user/Projects/chain-toolkit-group/nodriver-mcp/.venv/bin/python",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/nodriver-mcp",
+        "run",
+        "nodriver-mcp"
+      ]
+    }
+  }
+}
+```
+
+Replace `/absolute/path/to/nodriver-mcp` with your actual path (output of `pwd`).
+
+**Configuration using Python directly:**
+
+```json
+{
+  "mcpServers": {
+    "nodriver": {
+      "command": "/absolute/path/to/nodriver-mcp/.venv/bin/python",
       "args": ["-m", "nodriver_mcp"]
     }
   }
 }
 ```
+
+**Example paths:**
+- macOS/Linux: `/Users/username/Projects/nodriver-mcp`
+- Windows: `C:\\Users\\username\\Projects\\nodriver-mcp`
+
+### Step 5: Verify installation
+
+1. Restart Claude Code or Claude Desktop
+2. Check that the `nodriver` MCP is loaded (you should see browser-related tools available)
+3. Test by asking Claude to create a browser session:
+   ```
+   Create a browser session and navigate to https://example.com
+   ```
 
 ## Usage
 
@@ -164,3 +253,71 @@ Container environment variables:
 
 - Sessions automatically expire after 30 minutes of inactivity
 - All containers are cleaned up when the MCP server stops
+
+## Troubleshooting
+
+### Docker not running
+
+```
+Error: Cannot connect to Docker daemon
+```
+
+**Solution**: Start Docker Desktop or the Docker service:
+- macOS/Windows: Open Docker Desktop
+- Linux: `sudo systemctl start docker`
+
+### Docker image not found
+
+```
+Error: Image nodriver-mcp-browser not found
+```
+
+**Solution**: Build the image first:
+```bash
+cd /path/to/nodriver-mcp
+docker build -t nodriver-mcp-browser .
+```
+
+### MCP server not loading
+
+If the MCP doesn't appear in Claude:
+
+1. Check the configuration file path is correct
+2. Verify the absolute path exists:
+   ```bash
+   ls -la /your/path/to/nodriver-mcp
+   ```
+3. Test the MCP server manually:
+   ```bash
+   cd /path/to/nodriver-mcp
+   source .venv/bin/activate
+   nodriver-mcp
+   ```
+   You should see "Starting nodriver-mcp server" in the logs.
+
+### Permission denied on Docker socket (Linux)
+
+```
+Error: Permission denied while trying to connect to the Docker daemon socket
+```
+
+**Solution**: Add your user to the docker group:
+```bash
+sudo usermod -aG docker $USER
+# Then log out and log back in
+```
+
+### Port conflicts
+
+If browser sessions fail to start, check if ports 9001-9100 are available:
+```bash
+lsof -i :9001
+```
+
+### Viewing logs
+
+To debug issues, check the MCP server logs in Claude Code or run manually:
+```bash
+cd /path/to/nodriver-mcp
+uv run nodriver-mcp 2>&1 | tee mcp.log
+```
