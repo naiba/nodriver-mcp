@@ -444,6 +444,29 @@ def register_tools(server: Server):
                     "required": ["session_id", "url"],
                 },
             ),
+            # Performance
+            Tool(
+                name="browser_get_performance_metrics",
+                description="Get performance metrics from CDP Performance.getMetrics(). Returns metrics like JSHeapUsedSize, LayoutCount, RecalcStyleCount, etc.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "Session ID"},
+                    },
+                    "required": ["session_id"],
+                },
+            ),
+            Tool(
+                name="browser_get_performance_timing",
+                description="Get performance timing data including FCP, LCP, DOM load times, and other Web Vitals metrics.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {"type": "string", "description": "Session ID"},
+                    },
+                    "required": ["session_id"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -659,6 +682,13 @@ def register_tools(server: Server):
                     "/download_file",
                     json={"url": arguments["url"]},
                 )
+
+            # Performance
+            elif name == "browser_get_performance_metrics":
+                result = await manager.request(arguments["session_id"], "GET", "/get_performance_metrics")
+
+            elif name == "browser_get_performance_timing":
+                result = await manager.request(arguments["session_id"], "GET", "/get_performance_timing")
 
             else:
                 result = {"error": f"Unknown tool: {name}"}

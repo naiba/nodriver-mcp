@@ -134,8 +134,10 @@ async def lifespan(app: FastAPI):
         browser_args=[
             "--no-sandbox",
             "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--disable-software-rasterizer",
+            "--window-size=1920,1080",
+            # Anti-detection
+            "--disable-blink-features=AutomationControlled",
+            "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         ]
     )
 
@@ -413,6 +415,7 @@ async def new_tab(req: NewTabRequest):
     tab_id = generate_tab_id()
     tabs[tab_id] = tab
     current_tab_id = tab_id
+
     return {"tab_id": tab_id, "url": tab.url}
 
 
@@ -506,6 +509,100 @@ async def download_file(req: DownloadFileRequest):
             f.write(response.content)
 
     return {"path": filepath}
+
+
+# Performance endpoints
+
+@app.get("/get_performance_metrics")
+async def get_performance_metrics():
+    """Get performance metrics via CDP Performance.getMetrics()."""
+    tab = get_current_tab()
+
+    # Enable Performance domain first
+    await tab.send(uc.cdp.performance.enable())
+
+    # Get metrics
+    metrics_result = await tab.send(uc.cdp.performance.get_metrics())
+
+    # Convert to dict
+    metrics_dict = {}
+    for metric in metrics_result:
+        metrics_dict[metric.name] = metric.value
+
+    return {"metrics": metrics_dict}
+
+
+@app.get("/get_performance_timing")
+async def get_performance_timing():
+    """Get performance timing data via Navigation Timing API."""
+    tab = get_current_tab()
+
+    # Get navigation timing
+    timing_script = """
+    (() => {
+        const timing = performance.timing;
+        const navigation = performance.getEntriesByType('navigation')[0];
+
+        // Calculate key metrics
+        const result = {
+            // Navigation Timing API (legacy but widely supported)
+            timing: {
+                navigationStart: timing.navigationStart,
+                domContentLoadedEventEnd: timing.domContentLoadedEventEnd,
+                loadEventEnd: timing.loadEventEnd,
+                responseEnd: timing.responseEnd,
+                domInteractive: timing.domInteractive,
+                domComplete: timing.domComplete,
+            },
+            // Calculated metrics (in ms)
+            calculated: {
+                dnsLookup: timing.domainLookupEnd - timing.domainLookupStart,
+                tcpConnection: timing.connectEnd - timing.connectStart,
+                serverResponse: timing.responseEnd - timing.requestStart,
+                domParsing: timing.domInteractive - timing.responseEnd,
+                domContentLoaded: timing.domContentLoadedEventEnd - timing.navigationStart,
+                fullPageLoad: timing.loadEventEnd - timing.navigationStart,
+            }
+        };
+
+        // Add Navigation Timing Level 2 data if available
+        if (navigation) {
+            result.navigationTiming = {
+                type: navigation.type,
+                redirectCount: navigation.redirectCount,
+                domContentLoadedEventStart: navigation.domContentLoadedEventStart,
+                domContentLoadedEventEnd: navigation.domContentLoadedEventEnd,
+                loadEventStart: navigation.loadEventStart,
+                loadEventEnd: navigation.loadEventEnd,
+                domInteractive: navigation.domInteractive,
+                domComplete: navigation.domComplete,
+                transferSize: navigation.transferSize,
+                encodedBodySize: navigation.encodedBodySize,
+                decodedBodySize: navigation.decodedBodySize,
+            };
+        }
+
+        // Add paint timing (FCP, FP)
+        const paintEntries = performance.getEntriesByType('paint');
+        result.paint = {};
+        for (const entry of paintEntries) {
+            result.paint[entry.name] = entry.startTime;
+        }
+
+        // Add LCP if available
+        try {
+            const lcpEntries = performance.getEntriesByType('largest-contentful-paint');
+            if (lcpEntries.length > 0) {
+                result.largestContentfulPaint = lcpEntries[lcpEntries.length - 1].startTime;
+            }
+        } catch (e) {}
+
+        return result;
+    })()
+    """
+
+    timing_data = await tab.evaluate(timing_script)
+    return {"timing": timing_data}
 
 
 if __name__ == "__main__":
