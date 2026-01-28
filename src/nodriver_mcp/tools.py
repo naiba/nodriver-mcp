@@ -25,7 +25,11 @@ def register_tools(server: Server):
                             "type": "boolean",
                             "description": "Run browser in headless mode (default: true)",
                             "default": True,
-                        }
+                        },
+                        "proxy": {
+                            "type": "string",
+                            "description": "Optional proxy server URL (e.g., 'http://proxy:8080' or 'socks5://proxy:1080')",
+                        },
                     },
                 },
             ),
@@ -478,7 +482,8 @@ def register_tools(server: Server):
             # Session management
             if name == "browser_create_session":
                 headless = arguments.get("headless", True)
-                session_id = await manager.create_session(headless=headless)
+                proxy = arguments.get("proxy")
+                session_id = await manager.create_session(headless=headless, proxy=proxy)
                 result = {"session_id": session_id}
 
             elif name == "browser_destroy_session":

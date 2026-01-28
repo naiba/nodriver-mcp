@@ -127,18 +127,30 @@ async def lifespan(app: FastAPI):
     """Manage browser lifecycle."""
     global browser, tabs, current_tab_id
 
-    headless = os.environ.get("HEADLESS", "true").lower() == "true"
+    # Use Xvfb as display - Chrome gets real screen dimensions, no detection risk
+    # DISPLAY=:99 is set by start.sh, so we run non-headless against Xvfb
+    headless = os.environ.get("DISPLAY") is None
+
+    # Build browser arguments
+    browser_args = [
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--window-size=1920,1080",
+        "--start-maximized",
+        # Anti-detection
+        "--disable-blink-features=AutomationControlled",
+        # Use Linux User-Agent to match container platform
+        "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    ]
+
+    # Add proxy support if configured
+    proxy_server = os.environ.get("PROXY_SERVER")
+    if proxy_server:
+        browser_args.append(f"--proxy-server={proxy_server}")
 
     browser = await uc.start(
         headless=headless,
-        browser_args=[
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--window-size=1920,1080",
-            # Anti-detection
-            "--disable-blink-features=AutomationControlled",
-            "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        ]
+        browser_args=browser_args,
     )
 
     # Create initial tab
